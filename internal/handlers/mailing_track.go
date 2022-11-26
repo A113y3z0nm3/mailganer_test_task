@@ -22,7 +22,7 @@ func getUUIDFromParam(ctx *gin.Context) (uuid.UUID, error) {
 }
 
 // Track Отслеживает открытие сообщения и передает изображение в письмо
-func (h *TrackHandler) Track(ctx *gin.Context) {
+func (h *MailingHandler) Track(ctx *gin.Context) {
 	// Получаем уникальный номер письма
 	uuid, err := getUUIDFromParam(ctx)
 	if err != nil {

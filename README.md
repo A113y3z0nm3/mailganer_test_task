@@ -5,13 +5,9 @@ Complited:
     Handlers layer
 
 TODO:
-    Service layer
-    Repos layer
-    Log
-    Mail
-    Auth
-    Middleware
-    Models
-    Conf
-    Tests
+    HTML: Url image
+    Service: Image, Tests
+    Handlers: Funcs
+    Config: Models, Funcs, Env
+    Comments
     Main
