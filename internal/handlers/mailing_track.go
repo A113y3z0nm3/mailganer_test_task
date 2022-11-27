@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
+	log "mailganer_test_task/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -23,25 +23,26 @@ func getUUIDFromParam(ctx *gin.Context) (uuid.UUID, error) {
 
 // Track Отслеживает открытие сообщения и передает изображение в письмо
 func (h *MailingHandler) Track(ctx *gin.Context) {
+	ctxLog := log.ContextWithSpan(ctx, "TrackHandler")
+	l := h.logger.WithContext(ctxLog)
+
+	l.Debug("TrackHandler() started")
+	defer l.Debug("TrackHandler() done")
+
 	// Получаем уникальный номер письма
-	uuid, err := getUUIDFromParam(ctx)
+	uid, err := getUUIDFromParam(ctx)
 	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"error": err.Error(),
+		})
 
+		return
 	}
-
-	uid := fmt.Sprint(uuid)
 
 	// Записываем событие открытия
-	err = h.trackService.WriteOpening(ctx, uid)
-	if err != nil {
-
-	}
+	h.mailingService.WriteOpening(ctx, uid)
 
 	// Передаем изображение клиенту
-	image, err := h.trackService.GetImage(ctx)
-	if err != nil {
-
-	}
-
-	ctx.Data(http.StatusOK, "image", image)
+	ctx.Header("Content-Type", "text/html")
+	ctx.File("../images/mailing.jpeg")
 }

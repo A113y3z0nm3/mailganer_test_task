@@ -5,7 +5,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-//
+// Поля для записи в JSON
 const (
 	traceStr      = "trace_id"
 	spanStr       = "span_id"
@@ -30,20 +30,20 @@ type ContextInfo struct {
 	ParentSpanID string `json:"parent_span_id"`
 }
 
-// ContextWithTrace
+// ContextWithTrace Модифицирует контекст сквозным идентификатором вызова
 func ContextWithTrace(ctx context.Context, trace string) context.Context {
 	ctx = context.WithValue(ctx, TraceID{}, trace)
 	return ctx
 }
 
-// ContextWithSpan
+// ContextWithSpan Модифицирует контекст идентификатором вызова
 func ContextWithSpan(ctx context.Context, span string) context.Context {
 	ctx = contextWithParentSpan(ctx)
 	ctx = context.WithValue(ctx, SpanID{}, span)
 	return ctx
 }
 
-// contextWithParentSpan
+// contextWithParentSpan Модифицирует контекст родительским идентификатором вызова
 func contextWithParentSpan(ctx context.Context) context.Context {
 	span, ok := ctx.Value(SpanID{}).(string)
 	if !ok {

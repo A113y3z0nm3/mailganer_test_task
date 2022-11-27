@@ -5,9 +5,9 @@ Complited:
     Handlers layer
 
 TODO:
-    HTML: Url image
-    Service: Image, Tests
     Handlers: Funcs
-    Config: Models, Funcs, Env
     Comments
+    Config: Models, Funcs, Env, Email
     Main
+    Full Tests (HTML, templates)
+    Service: Tests
