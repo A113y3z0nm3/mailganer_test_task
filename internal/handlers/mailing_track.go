@@ -44,5 +44,5 @@ func (h *MailingHandler) Track(ctx *gin.Context) {
 
 	// Передаем изображение клиенту
 	ctx.Header("Content-Type", "text/html")
-	ctx.File("../images/mailing.jpeg")
+	ctx.File(h.imagePath)
 }

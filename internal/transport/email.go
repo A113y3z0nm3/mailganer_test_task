@@ -25,22 +25,22 @@ type File struct {
 
 // Message структура сообщения
 type Message struct {
-	Files      []File   // Список файлов
-	Message    string   // Текст сообщения
-	Subject    string   // Заголовок
-	ToEmails   []string // Список получателей
-	FromEmail  string   // Отправитель
-	CarbonCopy []string // Список добавленных в копию
+	Files      []File   							// Список файлов
+	Message    string   							// Текст сообщения
+	Subject    string   	`env:"MESSAGE_SUBJECT"`	// Заголовок
+	ToEmails   []string 							// Список получателей
+	FromEmail  string   	`env:"MESSAGE_FROM"`	// Отправитель
+	CarbonCopy []string 	`env:"MESSAGE_COPY"`	// Список добавленных в копию
 }
 
 // Config конфигурация для клиента
-type Config struct {
-	Host       string
-	Port       string
-	Username   string
-	Password   string
-	Timeout    int
-	TlsEnabled bool
+type EmailConfig struct {
+	Host       string	`env:"EMAIL_HOST"`
+	Port       string	`env:"EMAIL_PORT"`
+	Username   string	`env:"EMAIL_USERNAME"`
+	Password   string	`env:"EMAIL_PASSWORD"`
+	Timeout    int		`env:"EMAIL_TIMEOUT"`
+	TlsEnabled bool		`env:"EMAIL_TLS_BOOL"`
 }
 
 // Client реализует клиент для отправки сообщений
@@ -55,7 +55,7 @@ type Client struct {
 }
 
 // NewClient создает Client
-func NewClient(c *Config) (*Client, error) {
+func NewClient(c *EmailConfig) (*Client, error) {
 	// Проверяем ключевые поля, чтобы они не были пустыми
 	if err := validateConfig(c); err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (c *Client) createConn() (net.Conn, error) {
 }
 
 // Проверяет ключевые поля конфигурации
-func validateConfig(c *Config) error {
+func validateConfig(c *EmailConfig) error {
 	if len(c.Host) == 0 {
 		return fmt.Errorf("empty host")
 	}
@@ -164,6 +164,8 @@ func (c *Client) create(conn net.Conn, msg *Message) error {
 		}
 	}
 
+	//auth := smtp.PlainAuth("", c.username, c.password, c.host)
+
 	// Производим авторизацию
 	if err = client.Auth(LoginAuth(c.username, c.password)); err != nil {
 		return err
@@ -193,6 +195,12 @@ func (c *Client) create(conn net.Conn, msg *Message) error {
 		return err
 	}
 
+	log.Println("GO2")
+
+	// if err = smtp.SendMail(c.host+":"+c.port, auth, msg.FromEmail, msg.ToEmails, sample); err != nil {
+	// 	return err
+	// }
+
 	// Записываем данные в тело письма
 	if _, err = writer.Write(sample); err != nil {
 		return err
@@ -202,7 +210,6 @@ func (c *Client) create(conn net.Conn, msg *Message) error {
 		return err
 	}
 
-	log.Println("GO2")
 	// Отправляем сообщение и закрываем соединение
 	if err = client.Quit(); err != nil {
 		return err
@@ -246,6 +253,16 @@ func preprocessData(msg *Message) ([]byte, error) {
 	var buf bytes.Buffer
 	var err error
 
+	_, err = buf.WriteString("MIME-Version: 1.0\r\n")
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = buf.WriteString("Content-Type: text/html; charset=\"utf-8\"\r\n")
+	if err != nil {
+		return nil, err
+	}
+
 	_, err = buf.WriteString(fmt.Sprintf("From: %s\r\n", msg.FromEmail))
 	if err != nil {
 		return nil, err
@@ -261,72 +278,20 @@ func preprocessData(msg *Message) ([]byte, error) {
 		return nil, err
 	}
 
-	_, err = buf.WriteString("MIME-Version: 1.0\r\n")
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = buf.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=%s\n",
-		boundary))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = buf.WriteString(fmt.Sprintf("\r\n--%s\r\n", boundary))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = buf.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n")
-	if err != nil {
-		return nil, err
-	}
-
 	_, err = buf.WriteString(fmt.Sprintf("\r\n%s", msg.Message))
 	if err != nil {
 		return nil, err
 	}
 
-	for _, f := range msg.Files {
-		_, err = buf.WriteString(fmt.Sprintf("\r\n--%s\r\n", boundary))
-		if err != nil {
-			return nil, err
-		}
+	// _, err = buf.WriteString(fmt.Sprintf("\r\n--%s", boundary))
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-		_, err = buf.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n")
-		if err != nil {
-			return nil, err
-		}
-
-		_, err = buf.WriteString("Content-Transfer-Encoding: base64\r\n")
-		if err != nil {
-			return nil, err
-		}
-
-		_, err = buf.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=%s\r\n", f.Name))
-		if err != nil {
-			return nil, err
-		}
-
-		_, err = buf.WriteString(fmt.Sprintf("Content-ID: <%s>\r\n\r\n", f.Name))
-		if err != nil {
-			return nil, err
-		}
-
-		b := make([]byte, base64.StdEncoding.EncodedLen(len(f.Body)))
-		base64.StdEncoding.Encode(b, f.Body)
-		_, err = buf.Write(b)
-	}
-
-	_, err = buf.WriteString(fmt.Sprintf("\r\n--%s", boundary))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = buf.WriteString("--")
-	if err != nil {
-		return nil, err
-	}
+	// _, err = buf.WriteString("--")
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	return buf.Bytes(), nil
 }

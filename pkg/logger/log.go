@@ -6,11 +6,17 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"mailganer_test_task/internal/models"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+// ConfigLog конфигурация для логгера
+type ConfigLog struct {
+	Mode	string	`env:"LOG_MODE"`
+	Level	string	`env:"LOG_LEVEL"`
+	Output	string	`env:"LOG_OUTPUT"`
+}
 
 // Log - logger с обвязкой zap
 type Log struct {
@@ -20,7 +26,7 @@ type Log struct {
 var e *zap.Logger
 
 // InitLogger ...
-func InitLogger(c *models.ConfigLog) (*Log, error) {
+func InitLogger(c *ConfigLog) (*Log, error) {
 	pe, err := SetMod(c.Mode)
 	if err != nil {
 		return nil, err

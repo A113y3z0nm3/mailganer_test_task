@@ -3,11 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
+	"sync"
+	"bytes"
+	"time"
+	"html/template"
 	"mailganer_test_task/internal/models"
 	"mailganer_test_task/internal/transport"
 	log "mailganer_test_task/pkg/logger"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	cron "github.com/robfig/cron/v3"
@@ -16,8 +18,9 @@ import (
 // MailingServiceConfig Конфигурация для MailingService
 type MailingServiceConfig struct {
 	EmailClient		*email.Client
-	TemplatesPath	string
-	ImagePath		string
+	TemplatesPath	string			`env:"APP_TEMPLATES_PATH"`
+	Host			string			`env:"APP_HOST"`
+	Port			string			`env:"APP_PORT"`
 	Logger			*log.Log
 	Message			*email.Message
 }
@@ -29,7 +32,8 @@ type MailingService struct {
 	subs			map[uuid.UUID]models.Sub
 	emailClient		*email.Client
 	templatesPath	string
-	imagePath		string
+	host			string
+	port			string
 	logger			*log.Log
 	message			*email.Message
 }
@@ -39,7 +43,8 @@ func NewMailingService(c *MailingServiceConfig) *MailingService {
 	return &MailingService{
 		message: 		c.Message,
 		logger: 		c.Logger,
-		imagePath:		c.ImagePath,
+		port: 			c.Port,
+		host: 			c.Host,
 		templatesPath:	c.TemplatesPath,
 		emailClient:	c.EmailClient,
 		mux: 			sync.RWMutex{},
@@ -57,7 +62,9 @@ func (s *MailingService) WriteOpening(ctx context.Context, uid uuid.UUID) {
 	defer l.Debug("WriteOpening() done")
 
 	// Находим подписчика в кэше
+	s.mux.RLock()
 	sub := s.subs[uid]
+	s.mux.RUnlock()
 
 	// Сообщение о прочтении адресатом
 	l.Infof("User %s %s has read the message", sub.Firstname, sub.Lastname)
@@ -72,7 +79,7 @@ func (s *MailingService) AddSubTemplate(ctx context.Context, sub models.Sub) err
 	defer l.Debug("AddSubTemplate() done")
 
 	// Проверяем, есть ли подписчик в кэше
-	_, err := s.searchSub(ctx, uuid.Nil, sub)
+	_, err := s.searchSub(ctx, sub)
 	if err == nil {
 		// Если есть, возвращаем ошибку
 		return l.RErrorf("sub has already in mailing base.")
@@ -80,10 +87,9 @@ func (s *MailingService) AddSubTemplate(ctx context.Context, sub models.Sub) err
 
 	// Генерируем уникальный номер подписчику
 	sub.UUID = uuid.New()
-	sub.Uid = sub.UUID.String()
 
 	// Создаем шаблон сообщения
-	err = sub.BuildTemplate(ctx, s.templatesPath)
+	sub, err = s.BuildTemplate(ctx, sub)
 	if err != nil {
 		l.Errorf("Unable to build template: %v", err)
 		return err
@@ -115,7 +121,7 @@ func (s *MailingService) AddSubTemplate(ctx context.Context, sub models.Sub) err
 }
 
 // RemoveSub Ищет подписчика в кэше и удаляет его
-func (s *MailingService) RemoveSub(ctx context.Context, uid uuid.UUID, sub models.Sub) error {
+func (s *MailingService) RemoveSub(ctx context.Context, sub models.Sub) error {
 	ctx = log.ContextWithSpan(ctx, "RemoveSub")
 	l := s.logger.WithContext(ctx)
 
@@ -123,7 +129,7 @@ func (s *MailingService) RemoveSub(ctx context.Context, uid uuid.UUID, sub model
 	defer l.Debug("RemoveSub() done")
 
 	// Ищем подписчика
-	result, err := s.searchSub(ctx, uid, sub)
+	result, err := s.searchSub(ctx, sub)
 	if err != nil {
 		return err
 	}
@@ -134,7 +140,7 @@ func (s *MailingService) RemoveSub(ctx context.Context, uid uuid.UUID, sub model
 	delete(s.subs, result.UUID)
 	s.mux.Unlock()
 
-	l.Infof("Sub number %s has been deleted", uid.String())
+	l.Infof("Sub number %s has been deleted", sub.UUID.String())
 
 	return nil
 }
@@ -148,15 +154,20 @@ func (s *MailingService) PushEmail(ctx context.Context, sub models.Sub) error {
 	defer l.Debug("PushEmail() done")
 
 	// Ищем подписчика
-	result, err := s.searchSub(ctx, uuid.Nil, sub)
+	result, err := s.searchSub(ctx, sub)
 	if err != nil {
 		// Если не нашли - создаем ему шаблон
-		err := sub.BuildTemplate(ctx, s.templatesPath)
+		result, err = s.BuildTemplate(ctx, sub)
 		if err != nil {
 			l.Errorf("Unable to build template: %v", err)
 			return err
 		}
 	}
+
+	// Запишем пользователя в кэш, но без запланированной рассылки
+	s.mux.Lock()
+	s.subs[result.UUID] = sub
+	s.mux.Unlock()
 
 	// Отправляем сообщение
 	err = s.sendEmail(ctx, result, s.message)
@@ -182,12 +193,14 @@ func formatSched(date time.Time) string {
 }
 
 // searchSub Ищет подписчика в кэше
-func (s *MailingService) searchSub(ctx context.Context, uid uuid.UUID, sub models.Sub) (models.Sub, error) {
+func (s *MailingService) searchSub(ctx context.Context, sub models.Sub) (models.Sub, error) {
 	ctx = log.ContextWithSpan(ctx, "sendEmail")
 	l := s.logger.WithContext(ctx)
 
 	l.Debug("sendEmail() started")
 	defer l.Debug("sendEmail() done")
+
+	uid := sub.UUID
 
 	// Если входные данные пусты - сразу возвращаем ошибку и записываем в лог
 	if (uid == uuid.Nil) && (sub == models.Sub{}) {
@@ -215,7 +228,7 @@ func (s *MailingService) searchSub(ctx context.Context, uid uuid.UUID, sub model
 	defer s.mux.RUnlock()
 	for _, v := range s.subs {
 		// Если поля совпадают - возвращаем значение кэша
-		if v.BirthDay == sub.BirthDay && v.Firstname == sub.Firstname && v.Lastname == sub.Lastname && v.Email == sub.Email {
+		if v.Email == sub.Email {
 			return v, nil
 		}
 	}
@@ -248,4 +261,38 @@ func (s *MailingService) sendEmail(ctx context.Context, sub models.Sub, message 
 	l.Info("Message sent")
 
 	return nil
+}
+
+// BuildTemplate Собирает шаблон письма для подписчика и записывает его в буфер
+func (s *MailingService) BuildTemplate(ctx context.Context, sub models.Sub) (models.Sub, error) {
+	// Парсим html файл в шаблон
+	tmplt, err := template.ParseFiles(s.templatesPath)
+	if err != nil {
+		return sub, err
+	}
+
+	// Создаем байтовый буфер
+	buf := new(bytes.Buffer)
+
+	// Если пользователь не записан в рассылки, нужно создать ему uuid для ссылки на изображение
+	if sub.UUID == uuid.Nil {
+		sub.UUID = uuid.New()
+	}
+
+	// Маппим данные для шаблона
+	data := models.TemplateData{
+		Firstname: sub.Firstname,
+		Lastname: sub.Lastname,
+		URL: s.host+":"+s.port+"/"+sub.UUID.String(),
+	}
+
+	// Записываем данные подписчика в шаблон, а шаблон в буфер
+	if err := tmplt.Execute(buf, data); err != nil {
+		return sub, err
+	}
+
+	// Буфер с готовым шаблоном закрепляем за подписчиком
+	sub.Template = buf
+
+	return sub, nil
 }
