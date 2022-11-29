@@ -1,0 +1,315 @@
+openapi: 3.0.3
+
+info:
+  title: Mailganer test task
+  description: |
+    This is an simple API for mailing
+  version: "1.0.0"
+  contact:
+    name: A113y3z0nm3
+    url: github.com/A113y3z0nm3
+    email: hurr1cane@internet.ru
+
+servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/A113y3z0nm3/mailganer_test_task/1.0.0
+
+tags:
+  - name: add
+    description: Adds a subscriber to the cache
+  - name: del
+    description: Removes a subscriber from the cache
+  - name: send
+    description: Sends a letter
+  - name: pic
+    description: Sending an image to a letter
+
+paths:
+  /newSub:
+    post:
+      tags:
+        - add
+      summary: Adds a subscriber to the cache
+      operationId: addSub
+      responses:
+        '200':
+          description: Sub saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/subSaved'
+
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/invalidReq'
+
+        '409':
+          description: Sub already in cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/conflict'
+
+        '415':
+          description: Invalid content type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/invalidCT'
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/serverErr'
+      requestBody:
+        $ref: '#/components/requestBodies/AddSubRequest'
+
+  /sendMail:
+    post:
+      tags:
+        - send
+      summary: Sends a letter
+      operationId: sendLet
+      responses:
+        '200':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/msgSent'
+
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/invalidReq'
+
+        '415':
+          description: Invalid content type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/invalidCT'
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/serverErr'
+      requestBody:
+        $ref: '#/components/requestBodies/SendMailRequest'
+
+  /:{uid}:
+    parameters:
+      - name: uid
+        in: path
+        required: true
+        description: Sub's UUID
+        schema:
+          type: string
+          example: 07d21bd0-0c28-42ea-866a-79e2d5a54c81
+    get:
+      tags:
+        - pic
+      summary: Sending an image to a letter
+      operationId: sendPic
+      responses:
+        '400':
+          description: Invalid UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/invalidUUID'
+
+        '404':
+          description: Sub not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/subNF'
+
+        '200':
+          description: Sub has read the message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pic'
+
+    delete:
+      tags:
+        - del
+      summary: Removes a subscriber from the cache
+      operationId: delSub
+      responses:
+        '200':
+          description: Sub deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/subDeleted'
+
+        '400':
+          description: Invalid UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/invalidUUID'
+
+        '404':
+          description: Sub not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/subNF'
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/serverErr'
+
+
+components:
+  schemas:
+    serverErr:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: ["internal server error"]
+
+    invalidCT:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: ["Endpoint only accepts Content-Type application/json"]
+
+    invalidReq:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: ["invalid date format", "invalid email"]
+
+    subNF:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: ["sub not found"]
+
+    invalidUUID:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: ["invalid UUID"]
+
+    subDeleted:
+      type: string
+      enum: ["sub has been deleted"]
+
+    pic:
+      type: array
+      description: Picture converted to bytes
+      example: [1,2,3,1,2,3,1,2,3,1,2,3]
+      items:
+        type: integer
+        format: byte
+
+    conflict:
+      type: object
+      properties:
+        error:
+          type: string
+          enum: ["sub already in cache"]
+
+    msgSent:
+      type: string
+      enum: ["message sent"]
+
+    subSaved:
+      type: object
+      properties:
+        birth_day:
+          type: string
+          description: Sub's birth day
+          example: "2000-01-01"
+        email:
+          type: string
+          description: Sub's email address
+          example: "hurr1cane@internet.ru"
+        firstname:
+          type: string
+          description: Sub's firstname
+          example: "Billy"
+        lastname:
+          type: string
+          description: Sub's lastname
+          example: "Herrington"
+
+  requestBodies:
+    AddSubRequest:
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - birth_day
+              - email
+              - firstname
+              - lastname
+            properties:
+              birth_day:
+                type: string
+                description: Sub's birth day
+                example: "2000-01-01"
+              email:
+                type: string
+                description: Sub's email address
+                example: "hurr1cane@internet.ru"
+              firstname:
+                type: string
+                description: Sub's firstname
+                example: "Billy"
+              lastname:
+                type: string
+                description: Sub's lastname
+                example: "Herrington"
+
+    SendMailRequest:
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - email
+              - firstname
+              - lastname
+            properties:
+              birth_day:
+                type: string
+                description: Sub's birth day
+                example: "2000-01-01"
+              email:
+                type: string
+                description: Sub's email address
+                example: "hurr1cane@internet.ru"
+              firstname:
+                type: string
+                description: Sub's firstname
+                example: "Billy"
+              lastname:
+                type: string
+                description: Sub's lastname
+                example: "Herrington"

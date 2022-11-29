@@ -1,12 +1,12 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"sync"
-	"bytes"
-	"time"
 	"html/template"
+	"sync"
+	"time"
 	"mailganer_test_task/internal/models"
 	"mailganer_test_task/internal/transport"
 	log "mailganer_test_task/pkg/logger"
@@ -15,9 +15,28 @@ import (
 	cron "github.com/robfig/cron/v3"
 )
 
+// Client Интерфейс к email клиенту
+type Client interface {
+	Send(msg *email.Message) error
+}
+
+// Cron Интерфейс к планировщику
+type Cron interface {
+	AddFunc(spec string, cmd func()) (cron.EntryID, error)
+	AddJob(spec string, cmd cron.Job) (cron.EntryID, error)
+	Entries() []cron.Entry
+	Entry(id cron.EntryID) cron.Entry
+	Location() *time.Location
+	Remove(id cron.EntryID)
+	Run()
+	Schedule(schedule cron.Schedule, cmd cron.Job) cron.EntryID
+	Start()
+	Stop() context.Context
+}
+
 // MailingServiceConfig Конфигурация для MailingService
 type MailingServiceConfig struct {
-	EmailClient		*email.Client
+	EmailClient		Client
 	TemplatesPath	string			`env:"APP_TEMPLATES_PATH"`
 	Host			string			`env:"APP_HOST"`
 	Port			string			`env:"APP_PORT"`
@@ -28,9 +47,9 @@ type MailingServiceConfig struct {
 // MailingService Сервис почтовой рассылки
 type MailingService struct {
 	mux				sync.RWMutex
-	sched			*cron.Cron
+	sched			Cron
 	subs			map[uuid.UUID]models.Sub
-	emailClient		*email.Client
+	emailClient		Client
 	templatesPath	string
 	host			string
 	port			string
@@ -54,7 +73,7 @@ func NewMailingService(c *MailingServiceConfig) *MailingService {
 }
 
 // WriteOpening Записывает в лог прочтение письма получателем
-func (s *MailingService) WriteOpening(ctx context.Context, uid uuid.UUID) {
+func (s *MailingService) WriteOpening(ctx context.Context, uid uuid.UUID) error {
 	ctx = log.ContextWithSpan(ctx, "WriteOpening")
 	l := s.logger.WithContext(ctx)
 
@@ -63,11 +82,17 @@ func (s *MailingService) WriteOpening(ctx context.Context, uid uuid.UUID) {
 
 	// Находим подписчика в кэше
 	s.mux.RLock()
-	sub := s.subs[uid]
+	sub, ok := s.subs[uid]
 	s.mux.RUnlock()
 
 	// Сообщение о прочтении адресатом
-	l.Infof("User %s %s has read the message", sub.Firstname, sub.Lastname)
+	if ok {
+		l.Infof("User %s %s has read the message", sub.Firstname, sub.Lastname)
+
+		return nil
+	}
+
+	return l.RError("data not found")
 }
 
 // AddSubTemplate Добавляет подписчика и шаблон письма в кэш и планировщик
@@ -82,14 +107,14 @@ func (s *MailingService) AddSubTemplate(ctx context.Context, sub models.Sub) err
 	_, err := s.searchSub(ctx, sub)
 	if err == nil {
 		// Если есть, возвращаем ошибку
-		return l.RErrorf("sub has already in mailing base.")
+		return l.RError("sub has already in mailing base.")
 	}
 
 	// Генерируем уникальный номер подписчику
 	sub.UUID = uuid.New()
 
 	// Создаем шаблон сообщения
-	sub, err = s.BuildTemplate(ctx, sub)
+	sub, err = s.BuildTemplate(sub)
 	if err != nil {
 		l.Errorf("Unable to build template: %v", err)
 		return err
@@ -115,7 +140,7 @@ func (s *MailingService) AddSubTemplate(ctx context.Context, sub models.Sub) err
 	s.subs[sub.UUID] = sub
 	s.mux.Unlock() 
 
-	l.Info("Sub has been saved")
+	l.Infof("Sub has been saved with UUID: %s", sub.UUID)
 
 	return nil
 }
@@ -157,7 +182,7 @@ func (s *MailingService) PushEmail(ctx context.Context, sub models.Sub) error {
 	result, err := s.searchSub(ctx, sub)
 	if err != nil {
 		// Если не нашли - создаем ему шаблон
-		result, err = s.BuildTemplate(ctx, sub)
+		result, err = s.BuildTemplate(sub)
 		if err != nil {
 			l.Errorf("Unable to build template: %v", err)
 			return err
@@ -194,47 +219,33 @@ func formatSched(date time.Time) string {
 
 // searchSub Ищет подписчика в кэше
 func (s *MailingService) searchSub(ctx context.Context, sub models.Sub) (models.Sub, error) {
-	ctx = log.ContextWithSpan(ctx, "sendEmail")
+	ctx = log.ContextWithSpan(ctx, "searchSub")
 	l := s.logger.WithContext(ctx)
 
-	l.Debug("sendEmail() started")
-	defer l.Debug("sendEmail() done")
+	l.Debug("searchSub() started")
+	defer l.Debug("searchSub() done")
 
+	// Ищем по уникальному номеру
 	uid := sub.UUID
+	switch uid {
 
 	// Если входные данные пусты - сразу возвращаем ошибку и записываем в лог
-	if (uid == uuid.Nil) && (sub == models.Sub{}) {
-		return models.Sub{}, l.RError("invalid incoming data")
-	}
+	case uuid.Nil:
+		return sub, l.RError("sub not found")
 
-	// Если уникальный номер есть, можем быстро найти по нему
-	if (uid != uuid.Nil) {
-		// Доступ к кэшу по ключу
+	// Получаем значение кэша по ключу
+	default:
 		s.mux.RLock()
 		result, ok := s.subs[uid]
 		s.mux.RUnlock()
 
 		// Если есть - возвращаем, если нет - отдаем ошибку и записываем в лог
 		if !ok {
-			return models.Sub{}, l.RErrorf("sub number %s not found", uid.String())
+			return sub, l.RError("sub not found")
 		} else {
 			return result, nil
 		}
-
 	}
-
-	// Итерируемся по кэшу
-	s.mux.RLock()
-	defer s.mux.RUnlock()
-	for _, v := range s.subs {
-		// Если поля совпадают - возвращаем значение кэша
-		if v.Email == sub.Email {
-			return v, nil
-		}
-	}
-
-	//Если не нашли - отдаем ошибку и записываем в лог
-	return models.Sub{}, l.RError("sub not found")
 }
 
 // sendEmail Отправляет письмо
@@ -264,7 +275,7 @@ func (s *MailingService) sendEmail(ctx context.Context, sub models.Sub, message 
 }
 
 // BuildTemplate Собирает шаблон письма для подписчика и записывает его в буфер
-func (s *MailingService) BuildTemplate(ctx context.Context, sub models.Sub) (models.Sub, error) {
+func (s *MailingService) BuildTemplate(sub models.Sub) (models.Sub, error) {
 	// Парсим html файл в шаблон
 	tmplt, err := template.ParseFiles(s.templatesPath)
 	if err != nil {
@@ -281,9 +292,9 @@ func (s *MailingService) BuildTemplate(ctx context.Context, sub models.Sub) (mod
 
 	// Маппим данные для шаблона
 	data := models.TemplateData{
-		Firstname: sub.Firstname,
-		Lastname: sub.Lastname,
-		URL: s.host+":"+s.port+"/"+sub.UUID.String(),
+		Firstname:	sub.Firstname,
+		Lastname:	sub.Lastname,
+		URL:		s.host+":"+s.port+"/"+sub.UUID.String(),
 	}
 
 	// Записываем данные подписчика в шаблон, а шаблон в буфер

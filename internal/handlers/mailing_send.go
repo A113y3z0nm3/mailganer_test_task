@@ -65,13 +65,13 @@ func (h *MailingHandler) SendMail(ctx *gin.Context) {
 	}
 
 	// Отправляем рассылочное письмо
-	if err := h.mailingService.PushEmail(ctx, sub); err != nil {
+	if err := h.mailingService.PushEmail(ctxLog, sub); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
+			"error": "internal server error",
 		})
 
 		return
 	}
 
-	ctx.JSON(http.StatusOK, "ok")
+	ctx.JSON(http.StatusOK, "message sent")
 }

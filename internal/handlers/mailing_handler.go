@@ -1,9 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"regexp"
 	"time"
-	"context"
 	"mailganer_test_task/internal/models"
 	log "mailganer_test_task/pkg/logger"
 
@@ -13,7 +13,7 @@ import (
 
 // MailingService Интерфейс к сервису, отвечающему за отслеживание писем
 type MailingService interface {
-	WriteOpening(ctx context.Context, uid uuid.UUID)
+	WriteOpening(ctx context.Context, uid uuid.UUID) error
 	AddSubTemplate(ctx context.Context, sub models.Sub) error
 	RemoveSub(ctx context.Context, sub models.Sub) error
 	PushEmail(ctx context.Context, sub models.Sub) error
@@ -47,6 +47,19 @@ func ParseDate(str string) (time.Time, error){
 	return time.Parse("2006-01-01", str)
 }
 
+// getUIDFromParam Получает уникальный номер из ссылки
+func getUUIDFromParam(ctx *gin.Context) (uuid.UUID, error) {
+	str := ctx.Param("uid")
+
+	uuid, err := uuid.Parse(str)
+
+	if err != nil {
+		return uuid, err
+	}
+
+	return uuid, nil
+}
+
 // RegisterMailingHandler Регистратор обработчика
 func RegisterMailingHandler(c *MailingHandlerConfig) {
 	mailingHandler := MailingHandler{
@@ -60,5 +73,5 @@ func RegisterMailingHandler(c *MailingHandlerConfig) {
 	g.GET("/:uid", mailingHandler.Track)				// Получить изображение и отследить получение
 	g.POST("/newSub", mailingHandler.AddSub)			// Добавить подписчика в рассылку
 	g.POST("/sendMail", mailingHandler.SendMail)		// Отправить рассылку списку подписчиков
-	g.DELETE("/deleteSub", mailingHandler.DeleteSub)	// Удалить подписчика из рассылки
+	g.DELETE("/:uid", mailingHandler.DeleteSub)	// Удалить подписчика из рассылки
 }

@@ -60,9 +60,15 @@ func (h *MailingHandler) AddSub(ctx *gin.Context) {
 	}
 
 	// Добавляем подписчика
-	if err = h.mailingService.AddSubTemplate(ctx, sub); err != nil {
+	if err = h.mailingService.AddSubTemplate(ctxLog, sub); err != nil {
+		if err.Error() == "sub has already in mailing base." {
+			ctx.JSON(http.StatusConflict, gin.H{
+				"error": "sub already in cache",
+			})
+		}
+
 		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
+			"error": "internal server error",
 		})
 
 		return

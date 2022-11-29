@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	//"mailganer_test_task/internal/services"
 	"os"
 
 	"go.uber.org/zap"
@@ -18,11 +19,19 @@ type ConfigLog struct {
 	Output	string	`env:"LOG_OUTPUT"`
 }
 
+// DevConfig Конфигурация конфига для тестов
+var DevConfig = &ConfigLog{
+	Mode:	"development",
+	Level:	"debug",
+	Output:	"stdout",
+}
+
 // Log - logger с обвязкой zap
 type Log struct {
 	*zap.Logger
 }
 
+// e Ядро логгера
 var e *zap.Logger
 
 // InitLogger ...

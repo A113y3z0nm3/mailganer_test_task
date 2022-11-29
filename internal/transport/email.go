@@ -3,18 +3,12 @@ package email
 import (
 	"bytes"
 	"crypto/tls"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"net"
 	"net/smtp"
 	"strings"
 	"time"
-)
-
-const (
-	delimiter = "**=myohmy689407924327"
-	boundary  = "my-boundary-779"
 )
 
 // File структура для отправки файлов
@@ -75,25 +69,25 @@ func NewClient(c *EmailConfig) (*Client, error) {
 }
 
 // Создает подключение с включенным tls
-func (c *Client) createTlsConn() (net.Conn, error) {
+// func (c *Client) createTlsConn() (net.Conn, error) {
 
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true,
-		ServerName:         c.host,
-	}
+// 	tlsConfig := &tls.Config{
+// 		InsecureSkipVerify: true,
+// 		ServerName:         c.host,
+// 	}
 
-	// Настраиваем timeout
-	dialer := &net.Dialer{
-		Timeout: time.Duration(c.timeout) * time.Second,
-	}
+// 	// Настраиваем timeout
+// 	dialer := &net.Dialer{
+// 		Timeout: time.Duration(c.timeout) * time.Second,
+// 	}
 
-	conn, err := tls.DialWithDialer(dialer, "tcp", c.serverName, tlsConfig)
-	if err != nil {
-		return nil, err
-	}
+// 	conn, err := tls.DialWithDialer(dialer, "tcp", c.serverName, tlsConfig)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	return conn, nil
-}
+// 	return conn, nil
+// }
 
 // Создание обычного подключения к smtp серверу
 func (c *Client) createConn() (net.Conn, error) {
@@ -129,6 +123,7 @@ func validateConfig(c *EmailConfig) error {
 	return nil
 }
 
+// Отправляет письмо на почтовый сервер
 func (c *Client) Send(msg *Message) error {
 	var conn net.Conn
 	var err error
@@ -164,8 +159,6 @@ func (c *Client) create(conn net.Conn, msg *Message) error {
 		}
 	}
 
-	//auth := smtp.PlainAuth("", c.username, c.password, c.host)
-
 	// Производим авторизацию
 	if err = client.Auth(LoginAuth(c.username, c.password)); err != nil {
 		return err
@@ -176,7 +169,6 @@ func (c *Client) create(conn net.Conn, msg *Message) error {
 		return err
 	}
 
-	log.Println("GO")
 	// Добавляем получателей
 	for _, to := range msg.ToEmails {
 		if err = client.Rcpt(to); err != nil {
@@ -194,12 +186,6 @@ func (c *Client) create(conn net.Conn, msg *Message) error {
 	if err != nil {
 		return err
 	}
-
-	log.Println("GO2")
-
-	// if err = smtp.SendMail(c.host+":"+c.port, auth, msg.FromEmail, msg.ToEmails, sample); err != nil {
-	// 	return err
-	// }
 
 	// Записываем данные в тело письма
 	if _, err = writer.Write(sample); err != nil {
@@ -219,33 +205,33 @@ func (c *Client) create(conn net.Conn, msg *Message) error {
 }
 
 // Создает письмо
-func createSample(msg *Message) string {
-	sample := fmt.Sprintf("From: %s\r\n", msg.FromEmail)
-	sample += fmt.Sprintf("To: %s\r\n", strings.Join(msg.ToEmails, ";"))
+// func createSample(msg *Message) string {
+// 	sample := fmt.Sprintf("From: %s\r\n", msg.FromEmail)
+// 	sample += fmt.Sprintf("To: %s\r\n", strings.Join(msg.ToEmails, ";"))
 
-	if len(msg.CarbonCopy) > 0 {
-		sample += fmt.Sprintf("Cc: %s\r\n", strings.Join(msg.CarbonCopy, ";"))
-	}
-	sample += fmt.Sprintf("Subject: %s\r\n", msg.Subject)
+// 	if len(msg.CarbonCopy) > 0 {
+// 		sample += fmt.Sprintf("Cc: %s\r\n", strings.Join(msg.CarbonCopy, ";"))
+// 	}
+// 	sample += fmt.Sprintf("Subject: %s\r\n", msg.Subject)
 
-	sample += "MIME-Version: 1.0\r\n"
-	sample += fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"%s\"\r\n", delimiter)
+// 	sample += "MIME-Version: 1.0\r\n"
+// 	sample += fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"%s\"\r\n", delimiter)
 
-	sample += fmt.Sprintf("\r\n--%s\r\n", delimiter)
-	sample += "Content-Type: text/html; charset=\"utf-8\"\r\n"
-	sample += "Content-Transfer-Encoding: 7bit\r\n"
-	sample += fmt.Sprintf("\r\n%s\r\n", msg.Message)
+// 	sample += fmt.Sprintf("\r\n--%s\r\n", delimiter)
+// 	sample += "Content-Type: text/html; charset=\"utf-8\"\r\n"
+// 	sample += "Content-Transfer-Encoding: 7bit\r\n"
+// 	sample += fmt.Sprintf("\r\n%s\r\n", msg.Message)
 
-	for i := 0; i < len(msg.Files); i++ {
-		sample += fmt.Sprintf("\r\n--%s\r\n", delimiter)
-		sample += "Content-Type: text/plain; charset=\"utf-8\"\r\n"
-		sample += "Content-Transfer-Encoding: base64\r\n"
-		sample += "Content-Disposition: attachment;filename=\"" + msg.Files[i].Name + "\"\r\n"
-		sample += "\r\n" + base64.StdEncoding.EncodeToString(msg.Files[i].Body)
-	}
+// 	for i := 0; i < len(msg.Files); i++ {
+// 		sample += fmt.Sprintf("\r\n--%s\r\n", delimiter)
+// 		sample += "Content-Type: text/plain; charset=\"utf-8\"\r\n"
+// 		sample += "Content-Transfer-Encoding: base64\r\n"
+// 		sample += "Content-Disposition: attachment;filename=\"" + msg.Files[i].Name + "\"\r\n"
+// 		sample += "\r\n" + base64.StdEncoding.EncodeToString(msg.Files[i].Body)
+// 	}
 
-	return sample
-}
+// 	return sample
+// }
 
 // Подготавливает данные для отправки
 func preprocessData(msg *Message) ([]byte, error) {

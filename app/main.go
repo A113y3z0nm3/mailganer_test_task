@@ -47,23 +47,23 @@ func main() {
 	router := gin.Default()
 
 	// Создаем сервис
-	c.Service.Message = c.Message
-	c.Service.EmailClient = emailClient
-	c.Service.Logger = logger
-	mailingService := services.NewMailingService(c.Service)
+	c.Service.Message		= c.Message
+	c.Service.EmailClient	= emailClient
+	c.Service.Logger		= logger
+	mailingService			:= services.NewMailingService(c.Service)
 	l.Info("created mailing service")
 
-	// Регистрируем обработчик
-	c.Handler.Router = router
-	c.Handler.MailingService = mailingService
-	c.Handler.Logger = logger
+	// Регистрируем обработчики
+	c.Handler.Router			= router
+	c.Handler.MailingService	= mailingService
+	c.Handler.Logger			= logger
 	handlers.RegisterMailingHandler(c.Handler)
 	l.Info("mailing handler has been registered")
 
 	// Создаем сервер
 	server := &http.Server{
-		Addr: c.Service.Host+":"+c.Service.Port,
-		Handler: router,
+		Addr:		c.Service.Host+":"+c.Service.Port,
+		Handler:	router,
 	}
 
 	// Запускаем сервер
@@ -79,7 +79,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
 	l.Info("shutting down server...")
@@ -87,7 +87,7 @@ func main() {
 		log.Fatalf("server forced to shutdown: %v\n", err)
 	}
 
-	l.Info("shutting down logger")
+	l.Info("shutting down logger...")
 	l.LogGracefulShutdown()
 
 	log.Println("successfully")

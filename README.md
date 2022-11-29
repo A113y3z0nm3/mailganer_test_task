@@ -1,5 +1,8 @@
 # mailganer_test_task
 Test task for interview in mailganer
 
-TODO:
-    Service: Tests
+Handlers:
+    /newSub     (POST) - Добавляет нового подписчика в рассылку и создает ему шаблон (отправка по дням рождения)
+    /sendMail   (POST) - Отправляет письмо пользователю и создает шаблон (отправка по ручке, но uuid и шаблон останутся в кеше)
+    /:uid       (GET) - Отдает изображение в письмо по uuid пользователя
+                (DELETE) - Удаляет пользователя из кэша
